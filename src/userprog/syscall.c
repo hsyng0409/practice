@@ -3,6 +3,9 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
+
+typedef int pid_t;
 
 static void syscall_handler (struct intr_frame *);
 
@@ -13,8 +16,29 @@ syscall_init (void)
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
   printf ("system call!\n");
   thread_exit ();
 }
+
+// static bool valid_address(void *addr) {
+//   if(!is_user_vaddr(addr) || addr == NULL) return false;
+//   return true;
+// }
+
+// void halt(void){
+
+// }
+
+// void exit(int status){
+
+// }
+
+// pid_t exec(const char *cmd_line){
+
+// }
+
+// int wait(pid_t pid){
+
+// }
