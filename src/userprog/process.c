@@ -39,14 +39,57 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Parse command line and get program name */
-  char *save_ptr;
-  file_name = strtok_r(fn_copy, " ", &save_ptr);
+  char *save_ptr, *program_name;
+  program_name = strtok_r(file_name, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (program_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
+}
+
+static void argument_stack (int argc, char *argv[], void **stack_ptr){
+  char *addr[128]; /* Store start address of character strings */
+  int i, arglen;
+  int total = 0;
+
+  /* Push character strings from left to right */
+  for (i = argc-1; i>=0; i--) {
+    arglen = strlen(argv[i]) + 1;
+    total += arglen;
+    *stack_ptr -= arglen;
+    strlcpy(*stack_ptr, argv[i], arglen);
+    addr[i] = *stack_ptr;
+  }
+
+  /* Place padding if necessary to align by 4 byte */
+  if (total % 4 != 0) {
+    *stack_ptr -= 4 - (total % 4);
+  }
+
+  /* Push start address of the character strings */
+  for (i = argc; i>=0; i--){
+    if (i == argc) {
+      *stack_ptr -= 4;
+      **(uint32_t **) stack_ptr = 0;
+    } else {
+      *stack_ptr -= 4;
+      **(uint32_t **) stack_ptr = addr[i];
+    }
+  }
+
+  /* Push argv */
+  *stack_ptr -= 4;
+  **(uint32_t **)stack_ptr = *stack_ptr + 4;
+
+  /* Push argc */
+  *stack_ptr -= 4;
+  **(uint32_t **)stack_ptr = argc;
+
+  /* Push the address of the next instruction (return address) */
+  *stack_ptr -= 4;
+  **(uint32_t **) stack_ptr = 0;
 }
 
 /* A thread function that loads a user process and starts it
@@ -58,30 +101,27 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  // char *fn_copy;
+  /* Parse the command line */
+  int count = 0;
+  char *parse[128];
+  char *token, *save_ptr;
 
-  // fn_copy = palloc_get_page (0);
-  // if (fn_copy == NULL)
-  //   return TID_ERROR;
-  // strlcpy (fn_copy, file_name, PGSIZE);
-
-  // /* Parse the command line */
-  // int count = 0;
-  // char **parse;
-  // char *token, *save_ptr;
-
-  // for (token = strtok_r(fn_copy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
-  //   parse[count] = token;
-  //   count++;
-  // }
-  // count--;
+  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+    parse[count] = token;
+    count++;
+  }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (parse[0], &if_.eip, &if_.esp);
+
+  if(success){
+    argument_stack(count, parse, &if_.esp);
+    // hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
+  }
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -460,7 +500,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
