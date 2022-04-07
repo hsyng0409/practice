@@ -48,6 +48,8 @@ syscall_handler (struct intr_frame *f)
       break;
 
     case SYS_READ:
+      read((int)*(uint32_t *)(f->esp + 4), (void *)*(uint32_t *)(f->esp + 8), 
+            (unsigned int)*(uint32_t *)(f->esp + 12));
       break;
 
     case SYS_WRITE:
