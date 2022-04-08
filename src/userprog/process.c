@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -148,10 +149,26 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  while(true);
-  return -1;
+  struct thread *parent = thread_current();
+  struct thread *child;
+  struct list_elem *e;
+
+  /* Search the descriptor of the child process by using child_tid */
+  for (e = list_begin (&parent->children); e != list_end (&parent->children);
+       e = list_next (e)){
+    child = list_entry(e, struct thread, child_elem);
+    if(child->tid == child_tid) break;
+  }
+  if(child == NULL) return -1;
+
+  /* The caller blocks until the child process exits */
+  sema_down(&child->wait_sema);
+
+  /* Once child process exits, deallocate the descriptor of child process
+  and return the exit status of child process */
+  return child->exit_status;
 }
 
 /* Free the current process's resources. */
@@ -177,6 +194,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  list_remove(&cur->child_elem);
+  sema_up(&cur->wait_sema);
 }
 
 /* Sets up the CPU for running user code in the current

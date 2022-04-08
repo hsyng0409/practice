@@ -464,6 +464,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+#ifdef USERPROG
+  sema_init(&t->wait_sema, 0);
+  list_init(&t->children);
+  list_push_back(&running_thread()->children, &t->child_elem);
+
+  for(int i=0; i<128; i++) {
+    t->fd[i] = NULL;
+  }
+#endif
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
