@@ -22,7 +22,10 @@ syscall_init (void)
 }
 
 static void valid_address(void *addr) {
-  if(!is_user_vaddr(addr) || addr == NULL) exit(-1);
+  if(!is_user_vaddr(addr) || addr == NULL) {
+    //pagedir_clear_page(addr);
+    exit(-1);
+  }
 }
 
 static void
@@ -125,7 +128,7 @@ void halt(void){
 }
 
 void exit(int status){
-  thread_current()->status = status;
+  //hread_current()->status = status;
   printf("%s: exit(%d)\n", thread_name(), status);
   thread_exit();
 }
@@ -158,6 +161,8 @@ int wait(pid_t pid){
 }
 
 bool create(const char *file, unsigned initial_size){
+  ASSERT(file != NULL);
+  ASSERT(initial_size >= 0);
   return filesys_create(file,initial_size);
 }
 
@@ -177,14 +182,19 @@ int open(const char *file){
     return -1;
   }
   
-  for(int i=3; i<128; i++){
-    if(thread_current()->fd[i] == NULL) {
-      if(strcmp(thread_name(), file) == 0){
+  struct thread *t = thread_current();
+
+  for(int i=2; i<128; i++){
+    if(t->fd[i] == NULL) {
+      if(strcmp(t->name, file) == 0){
         file_deny_write(f);
       }
-      thread_current()->fd[i] = f;
+      t->fd[i] = f;
       lock_release(&file_lock);
       return i;
+    }
+    else if(t->fd[i] == f){
+      close(i);
     }
   }
   lock_release(&file_lock);
@@ -198,6 +208,7 @@ int filesize(int fd){
 }
 
 int read(int fd, void *buffer, unsigned size) {
+  ASSERT(fd >= 0);
   int i;
   if(fd == 0) {
     input_getc();
@@ -216,6 +227,7 @@ int read(int fd, void *buffer, unsigned size) {
 }
 
 int write(int fd, const void *buffer, unsigned size) {
+  ASSERT(fd >= 0);
   if(fd == 1) {
     putbuf(buffer, size);
     return size;
@@ -247,13 +259,15 @@ void close(int fd){
 }
 
 void sigaction(int signum, void *handler){
-  /*struct thread *t = thread_current();
-  t -> handler = handler_reg(signum, handler);
-  */
+  struct thread *t = thread_current();
+  struct handler_reg *h;
+  h -> signum = signum;
+  h -> sighandler = handler;
+  t -> handler = h;
 }
 
 void sendsig(pid_t pid, int signum){
-  /*struct thread *parent = thread_current();
+  struct thread *parent = thread_current();
   struct thread *child;
   struct list_elem *e;
 
@@ -264,10 +278,11 @@ void sendsig(pid_t pid, int signum){
   }
   if(child == NULL) return -1;
 
-  handler_reg *h = child -> handler;
-  if(signum == n) printf("Signum: %d, Action: %d", signum, &hdr);
-  */
-  return;
+  struct handler_reg *reg = child  -> handler;
+  if(signum == reg->signum) {
+      printf("Signum: %d, Action: %d", reg->signum, &reg->sighandler);
+  }
+
 }
 
 void sched_yield(void){

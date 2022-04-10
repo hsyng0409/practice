@@ -21,7 +21,10 @@ void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
 
-//typedef void handler_reg(int signum, void *aux);
+struct handler_reg{
+    int signum;
+    void *sighandler;
+};
 void sigaction(int signum, void *handler);
 void sendsig(pid_t pid, int signum);
 void sched_yield(void);

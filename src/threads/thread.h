@@ -105,7 +105,9 @@ struct thread
     struct semaphore wait_sema;         /* For process_wait */
     struct semaphore exec_sema;
     struct file *running_file;
-    void *handler;
+    //struct list handler;
+    //struct list_elem hdr_elem;
+    struct handler_reg *handler;
 
     struct file *fd[128];
 #endif
