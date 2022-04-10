@@ -194,6 +194,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  file_close(cur->running_file);
+  cur -> running_file == NULL;
   list_remove(&cur->child_elem);
   sema_up(&cur->wait_sema);
 }
@@ -310,6 +312,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+  else {
+    file_deny_write(file);
+    t -> running_file = file;
+  }
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr

@@ -21,8 +21,10 @@ void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
 
+//typedef void handler_reg(int signum, void *aux);
 void sigaction(int signum, void *handler);
 void sendsig(pid_t pid, int signum);
 void sched_yield(void);
+
 
 #endif /* userprog/syscall.h */

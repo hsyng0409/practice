@@ -99,9 +99,13 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 
     int exit_status;
+    int load_status;
     struct list children;
     struct list_elem child_elem;
     struct semaphore wait_sema;         /* For process_wait */
+    struct semaphore exec_sema;
+    struct file *running_file;
+    void *handler;
 
     struct file *fd[128];
 #endif

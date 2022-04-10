@@ -131,7 +131,26 @@ void exit(int status){
 }
 
 pid_t exec(const char *cmd_line){
-  return process_execute(cmd_line);
+  tid_t tid;
+  /*struct thread *parent = thread_current();
+  struct thread *child;
+  struct list_elem *e;*/
+
+  tid = process_execute(cmd_line);
+  // Search the descriptor of the child process by using child_tid 
+  /*
+  for (e = list_begin (&parent->children); e != list_end (&parent->children);
+       e = list_next (e)){
+    child = list_entry(e, struct thread, child_elem);
+    if(child->tid == tid) break;
+  }
+  if(child == NULL) return -1;
+
+  // The caller blocks until the child process exits
+  sema_down(&child->exec_sema);
+  */
+
+  return (pid_t) tid;
 }
 
 int wait(pid_t pid){
@@ -139,11 +158,11 @@ int wait(pid_t pid){
 }
 
 bool create(const char *file, unsigned initial_size){
-  return true;
+  return filesys_create(file,initial_size);
 }
 
 bool remove(const char *file){
-  return true;
+  return filesys_remove(file);
 }
 
 int open(const char *file){
@@ -173,19 +192,27 @@ int open(const char *file){
 }
 
 int filesize(int fd){
-  return 0;
+  struct file *f;
+  f = thread_current() -> fd[fd];
+  return file_length(f);
 }
 
 int read(int fd, void *buffer, unsigned size) {
   int i;
   if(fd == 0) {
+    input_getc();
     for (i=0; i<size; i++) {
       if(((char *) buffer)[i] == '\0') {
-        break;
+        return i;
+        //break;
       }
     }
   }
-  return i;
+  else{
+    struct file *f = thread_current() -> fd[fd];
+    return file_read(f,buffer,size);
+  }
+  //return i;
 }
 
 int write(int fd, const void *buffer, unsigned size) {
@@ -193,29 +220,56 @@ int write(int fd, const void *buffer, unsigned size) {
     putbuf(buffer, size);
     return size;
   }
-  return -1;
+  else{
+    struct file *f = thread_current() -> fd[fd];
+    return file_write(f, buffer, size);
+  }
+  //return -1;
 }
 
 void seek(int fd, unsigned position){
-  
+  struct file *f = thread_current() -> fd[fd];
+  file_seek(f,position);
 }
 
 unsigned tell(int fd){
-  return 0;
+  struct file *f = thread_current() -> fd[fd];
+  return file_tell(f);
 }
 
 void close(int fd){
+  struct file *f;
+  struct thread *t = thread_current();
 
+  f = t -> fd[fd];
+  file_close(f);
+  t -> fd[fd] = NULL;
 }
 
 void sigaction(int signum, void *handler){
-
+  /*struct thread *t = thread_current();
+  t -> handler = handler_reg(signum, handler);
+  */
 }
 
 void sendsig(pid_t pid, int signum){
+  /*struct thread *parent = thread_current();
+  struct thread *child;
+  struct list_elem *e;
 
+  for (e = list_begin (&parent->children); e != list_end (&parent->children);
+       e = list_next (e)){
+    child = list_entry(e, struct thread, child_elem);
+    if(child->tid == pid) break;
+  }
+  if(child == NULL) return -1;
+
+  handler_reg *h = child -> handler;
+  if(signum == n) printf("Signum: %d, Action: %d", signum, &hdr);
+  */
+  return;
 }
 
 void sched_yield(void){
-
+  thread_yield();
 }
