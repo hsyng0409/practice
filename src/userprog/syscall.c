@@ -22,7 +22,8 @@ syscall_init (void)
 }
 
 static void valid_address(void *addr) {
-  if(!is_user_vaddr(addr) || addr == NULL) {
+  if(!is_user_vaddr(addr) || addr == NULL || 
+    !pagedir_get_page(thread_current() -> pagedir, addr)) {
     //pagedir_clear_page(addr);
     exit(-1);
   }
@@ -138,11 +139,13 @@ pid_t exec(const char *cmd_line){
   /*struct thread *parent = thread_current();
   struct thread *child;
   struct list_elem *e;*/
-
+  
+  ASSERT(cmd_line);
+  valid_address(cmd_line);
   tid = process_execute(cmd_line);
   // Search the descriptor of the child process by using child_tid 
-  /*
-  for (e = list_begin (&parent->children); e != list_end (&parent->children);
+  
+  /*for (e = list_begin (&parent->children); e != list_end (&parent->children);
        e = list_next (e)){
     child = list_entry(e, struct thread, child_elem);
     if(child->tid == tid) break;
@@ -150,8 +153,9 @@ pid_t exec(const char *cmd_line){
   if(child == NULL) return -1;
 
   // The caller blocks until the child process exits
-  sema_down(&child->exec_sema);
-  */
+  intr_enable();
+  sema_down(&child->exec_sema);*/
+  
 
   return (pid_t) tid;
 }
@@ -163,7 +167,10 @@ int wait(pid_t pid){
 bool create(const char *file, unsigned initial_size){
   ASSERT(file != NULL);
   ASSERT(initial_size >= 0);
-  return filesys_create(file,initial_size);
+  lock_acquire(&file_lock);
+  int success = filesys_create(file,initial_size);
+  lock_release(&file_lock);
+  return success;
 }
 
 bool remove(const char *file){
@@ -172,6 +179,7 @@ bool remove(const char *file){
 
 int open(const char *file){
   struct file *f;
+  struct thread *t = thread_current();
 
   valid_address(file);
   lock_acquire(&file_lock);
@@ -182,8 +190,6 @@ int open(const char *file){
     return -1;
   }
   
-  struct thread *t = thread_current();
-
   for(int i=2; i<128; i++){
     if(t->fd[i] == NULL) {
       if(strcmp(t->name, file) == 0){
@@ -194,7 +200,8 @@ int open(const char *file){
       return i;
     }
     else if(t->fd[i] == f){
-      close(i);
+      close(t -> fd[i]);
+      t -> fd[i] = NULL;
     }
   }
   lock_release(&file_lock);
@@ -202,6 +209,7 @@ int open(const char *file){
 }
 
 int filesize(int fd){
+  ASSERT(fd >= 2);
   struct file *f;
   f = thread_current() -> fd[fd];
   return file_length(f);
@@ -214,16 +222,19 @@ int read(int fd, void *buffer, unsigned size) {
     input_getc();
     for (i=0; i<size; i++) {
       if(((char *) buffer)[i] == '\0') {
-        return i;
-        //break;
+        //return i;
+        break;
       }
     }
   }
   else{
     struct file *f = thread_current() -> fd[fd];
-    return file_read(f,buffer,size);
+    file_deny_write(f);
+    i = file_read(f,buffer,size);
+    file_allow_write(f);
+    //return i;
   }
-  //return i;
+  return i;
 }
 
 int write(int fd, const void *buffer, unsigned size) {

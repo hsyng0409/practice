@@ -118,10 +118,11 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (parse[0], &if_.eip, &if_.esp);
-
+  //sema_up(&thread_current() -> exec_sema);
   if(success){
     argument_stack(count, parse, &if_.esp);
     // hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
+    
   }
 
   /* If load failed, quit. */
@@ -198,6 +199,7 @@ process_exit (void)
   //file_allow_write(cur -> running_file);
   //cur -> running_file == NULL;
   list_remove(&cur->child_elem);
+  intr_enable();
   sema_up(&cur->wait_sema);
 }
 
