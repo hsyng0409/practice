@@ -332,6 +332,19 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+struct thread *get_child_by_tid(tid_t tid) {
+  struct list_elem *e;
+  struct thread *t = thread_current();
+
+  for (e = list_begin (&t->children); e != list_end (&t->children);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      if(t->tid == tid) return t;
+    }
+  return NULL;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
@@ -467,10 +480,12 @@ init_thread (struct thread *t, const char *name, int priority)
 
 #ifdef USERPROG
   sema_init(&t->wait_sema, 0);
-  sema_init(&t->exec_sema, 0);
+  sema_init(&t->delete_sema, 0);
   list_init(&t->children);
   list_push_back(&running_thread()->children, &t->child_elem);
-  //list_init(&t->handler);
+  t->tid = &running_thread()->tid;
+  t->exit_status = -1;
+  list_init(&t->handlers);
 
   for(int i=0; i<128; i++) {
     t->fd[i] = NULL;

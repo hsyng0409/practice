@@ -30,6 +30,8 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *program_name[128];
+  int i=0;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -40,8 +42,12 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Parse command line and get program name */
-  char *save_ptr, *program_name;
-  program_name = strtok_r(file_name, " ", &save_ptr);
+  while(file_name[i] != ' ' && file_name[i] != '\0'){
+    i++;
+  }
+  strlcpy(program_name, file_name, i+1);
+
+  if(filesys_open(program_name) == NULL) return -1;
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (program_name, PRI_DEFAULT, start_process, fn_copy);
@@ -118,7 +124,6 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (parse[0], &if_.eip, &if_.esp);
-  //sema_up(&thread_current() -> exec_sema);
   if(success){
     argument_stack(count, parse, &if_.esp);
     // hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
@@ -128,7 +133,7 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
-    thread_exit ();
+    thread_exit();
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -153,7 +158,7 @@ int
 process_wait (tid_t child_tid) 
 {
   struct thread *parent = thread_current();
-  struct thread *child;
+  struct thread *child = NULL;
   struct list_elem *e;
 
   /* Search the descriptor of the child process by using child_tid */
@@ -169,6 +174,8 @@ process_wait (tid_t child_tid)
 
   /* Once child process exits, deallocate the descriptor of child process
   and return the exit status of child process */
+  list_remove(&child->child_elem);
+  sema_up(&child->delete_sema);
   return child->exit_status;
 }
 
@@ -195,12 +202,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  //file_close(cur->running_file);
-  //file_allow_write(cur -> running_file);
-  //cur -> running_file == NULL;
-  list_remove(&cur->child_elem);
   intr_enable();
   sema_up(&cur->wait_sema);
+  sema_down(&cur->delete_sema);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -315,10 +319,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-  else {
-    file_deny_write(file);
-    //t -> running_file = file;
-  }
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr

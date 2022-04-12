@@ -2,6 +2,7 @@
 #define USERPROG_SYSCALL_H
 
 #include <stdbool.h>
+#include <list.h>
 
 typedef int pid_t;
 
@@ -24,6 +25,7 @@ void close(int fd);
 struct handler_reg{
     int signum;
     void *sighandler;
+    struct list_elem handler_elem;
 };
 void sigaction(int signum, void *handler);
 void sendsig(pid_t pid, int signum);

@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -22,18 +23,23 @@ syscall_init (void)
 }
 
 static void valid_address(void *addr) {
-  if(!is_user_vaddr(addr) || addr == NULL || 
-    !pagedir_get_page(thread_current() -> pagedir, addr)) {
-    //pagedir_clear_page(addr);
-    exit(-1);
+  for(int i=0; i<4; i++){
+    if(!is_user_vaddr(addr+i) || addr+i == NULL || 
+      !pagedir_get_page(thread_current() -> pagedir, addr+i)) {
+      //pagedir_clear_page(addr);
+      exit(-1);
+    }
   }
 }
 
 static void
 syscall_handler (struct intr_frame *f) 
 {
+  valid_address(f->esp);
+
   uint32_t syscall_num = *(uint32_t *)f->esp;
-  // printf ("system call!\nsyscall_num: %d\n", syscall_num);
+  // printf ("--- system call! syscall_num: %d\n", syscall_num);
+  // printf("--- %s (%d)\n", thread_name(), thread_tid());
   switch(syscall_num) {
     case SYS_HALT:
       halt();
@@ -46,39 +52,40 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_EXEC:
       valid_address(f->esp + 4);
-      exec((char *)*(uint32_t *)(f->esp + 4));
+      f->eax = exec((char *)*(uint32_t *)(f->esp + 4));
+      break;
 
     case SYS_WAIT:
       valid_address(f->esp + 4);
-      wait((pid_t)*(uint32_t *)(f->esp + 4));
+      f->eax = wait((int)*(uint32_t *)(f->esp + 4));
       break;
 
     case SYS_CREATE:
       valid_address(f->esp + 4);
       valid_address(f->esp + 8);
-      create((char *)*(uint32_t *)(f->esp + 4), (unsigned)*(uint32_t *)(f->esp + 8));
+      f->eax = create((char *)*(uint32_t *)(f->esp + 4), (unsigned)*(uint32_t *)(f->esp + 8));
       break;
 
     case SYS_REMOVE:
       valid_address(f->esp + 4);
-      remove((char *)*(uint32_t *)(f->esp + 4));
+      f->eax = ((char *)*(uint32_t *)(f->esp + 4));
       break;
 
     case SYS_OPEN:
       valid_address(f->esp + 4);
-      open((char *)*(uint32_t *)(f->esp + 4));
+      f->eax = open((char *)*(uint32_t *)(f->esp + 4));
       break;
 
     case SYS_FILESIZE:
       valid_address(f->esp + 4);
-      filesize((int)*(uint32_t *)(f->esp + 4));
+      f->eax = filesize((int)*(uint32_t *)(f->esp + 4));
       break;
 
     case SYS_READ:
       valid_address(f->esp + 4);
       valid_address(f->esp + 8);
       valid_address(f->esp + 12);
-      read((int)*(uint32_t *)(f->esp + 4), (void *)*(uint32_t *)(f->esp + 8), 
+      f->eax = read((int)*(uint32_t *)(f->esp + 4), (void *)*(uint32_t *)(f->esp + 8), 
             (unsigned int)*(uint32_t *)(f->esp + 12));
       break;
 
@@ -86,7 +93,7 @@ syscall_handler (struct intr_frame *f)
       valid_address(f->esp + 4);
       valid_address(f->esp + 8);
       valid_address(f->esp + 12);
-      write((int)*(uint32_t *)(f->esp + 4), (void *)*(uint32_t *)(f->esp + 8), 
+      f->eax = write((int)*(uint32_t *)(f->esp + 4), (void *)*(uint32_t *)(f->esp + 8), 
             (unsigned int)*(uint32_t *)(f->esp + 12));
       break;
 
@@ -98,7 +105,7 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_TELL:
       valid_address(f->esp + 4);
-      tell((int)*(uint32_t *)(f->esp + 4));
+      f->eax = tell((int)*(uint32_t *)(f->esp + 4));
       break;
 
     case SYS_CLOSE:
@@ -129,46 +136,38 @@ void halt(void){
 }
 
 void exit(int status){
-  //hread_current()->status = status;
+  thread_current()->exit_status = status;
+  for(int i=3; i<128; i++) {
+    if(thread_current()->fd[i] != NULL){
+      close(i);
+    }
+  }
   printf("%s: exit(%d)\n", thread_name(), status);
   thread_exit();
 }
 
 pid_t exec(const char *cmd_line){
   tid_t tid;
-  /*struct thread *parent = thread_current();
-  struct thread *child;
-  struct list_elem *e;*/
   
-  ASSERT(cmd_line);
   valid_address(cmd_line);
   tid = process_execute(cmd_line);
-  // Search the descriptor of the child process by using child_tid 
-  
-  /*for (e = list_begin (&parent->children); e != list_end (&parent->children);
-       e = list_next (e)){
-    child = list_entry(e, struct thread, child_elem);
-    if(child->tid == tid) break;
-  }
-  if(child == NULL) return -1;
-
-  // The caller blocks until the child process exits
-  intr_enable();
-  sema_down(&child->exec_sema);*/
-  
-
-  return (pid_t) tid;
+  return tid;
 }
 
 int wait(pid_t pid){
-  return process_wait((tid_t) pid);
+  return process_wait(pid);
 }
 
 bool create(const char *file, unsigned initial_size){
-  ASSERT(file != NULL);
-  ASSERT(initial_size >= 0);
+  valid_address(file);
   lock_acquire(&file_lock);
-  int success = filesys_create(file,initial_size);
+  bool success = false;
+
+  if(strlen(file) == 0 || strlen(file) >= 14) {
+    lock_release(&file_lock);
+    return success;
+  }
+  success = filesys_create(file,initial_size);
   lock_release(&file_lock);
   return success;
 }
@@ -209,14 +208,16 @@ int open(const char *file){
 }
 
 int filesize(int fd){
-  ASSERT(fd >= 2);
+  if (fd < 2) exit(-1);
   struct file *f;
   f = thread_current() -> fd[fd];
   return file_length(f);
 }
 
 int read(int fd, void *buffer, unsigned size) {
-  ASSERT(fd >= 0);
+  if(fd < 0 || fd == 1 || fd >= 128) exit(-1);
+  valid_address(buffer);
+
   int i;
   if(fd == 0) {
     input_getc();
@@ -229,16 +230,18 @@ int read(int fd, void *buffer, unsigned size) {
   }
   else{
     struct file *f = thread_current() -> fd[fd];
-    file_deny_write(f);
+    lock_acquire(&file_lock);
     i = file_read(f,buffer,size);
-    file_allow_write(f);
+    lock_release(&file_lock);
     //return i;
   }
   return i;
 }
 
 int write(int fd, const void *buffer, unsigned size) {
-  ASSERT(fd >= 0);
+  if(fd < 0 || fd == 0 || fd >= 128) exit(-1);
+  valid_address(buffer);
+
   if(fd == 1) {
     putbuf(buffer, size);
     return size;
@@ -261,10 +264,14 @@ unsigned tell(int fd){
 }
 
 void close(int fd){
+  if (fd < 0 || fd >= 128) exit(-1);
+
   struct file *f;
   struct thread *t = thread_current();
 
   f = t -> fd[fd];
+  if(f == NULL) exit(-1);
+
   file_close(f);
   t -> fd[fd] = NULL;
 }
@@ -274,26 +281,28 @@ void sigaction(int signum, void *handler){
   struct handler_reg *h;
   h -> signum = signum;
   h -> sighandler = handler;
-  t -> handler = h;
+  list_push_back(&t->handlers, &h->handler_elem);
 }
 
 void sendsig(pid_t pid, int signum){
   struct thread *parent = thread_current();
-  struct thread *child;
-  struct list_elem *e;
+  struct thread *child = NULL;
+  struct list_elem *e, *r;
 
   for (e = list_begin (&parent->children); e != list_end (&parent->children);
        e = list_next (e)){
     child = list_entry(e, struct thread, child_elem);
-    if(child->tid == pid) break;
-  }
-  if(child == NULL) return -1;
 
-  struct handler_reg *reg = child  -> handler;
-  if(signum == reg->signum) {
-      printf("Signum: %d, Action: %d", reg->signum, &reg->sighandler);
+    if(child->tid == pid) {
+      struct handler_reg *reg;
+      for(r = list_begin(&child->handlers); r != list_end(&child->handlers); r=list_next(r)){
+        reg = list_entry(r, struct handler_reg, handler_elem);
+        if(signum == reg->signum) {
+          printf("Signum: %d, Action: %x", reg->signum, &reg->sighandler);
+        }
+      }
+    }
   }
-
 }
 
 void sched_yield(void){

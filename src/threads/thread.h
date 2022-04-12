@@ -103,11 +103,8 @@ struct thread
     struct list children;
     struct list_elem child_elem;
     struct semaphore wait_sema;         /* For process_wait */
-    struct semaphore exec_sema;
-    struct file *running_file;
-    //struct list handler;
-    //struct list_elem hdr_elem;
-    struct handler_reg *handler;
+    struct semaphore delete_sema;
+    struct list handlers;
 
     struct file *fd[128];
 #endif
@@ -143,6 +140,7 @@ void thread_yield (void);
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
+struct thread *get_child_by_tid(tid_t);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
