@@ -20,7 +20,8 @@ Seoyoung Hwang <hsyng@kaist.ac.kr>
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
 
-    None.
+None.
+
 
                ARGUMENT PASSING
                ================
@@ -94,16 +95,17 @@ access to reading and writing with files.
 
 -- added to struct thread (thread.h) --
     int exit_status : exit status of the thread
-    int load_status : 
-    int exit_flag : detect threads that are not correctly exited
+    int exit_flag : detect threads that are not correctly exited (load fail)
     struct thread *parent : parent process
     struct list children : child process list
     struct list_elem child_elem : child process list element
-    struct semaphore wait_sema : for process_wait 
-    struct semaphore delete_sema : 
+    struct semaphore wait_sema : for process_wait
+        holds the parent process from exiting until the child process exits
+    struct semaphore delete_sema : for process_wait
+        holds the child process from dying before the resources are freed
     struct semaphore load_sema : wait for the successful load
 
-    struct list handlers : reg sighandler action
+    struct list handlers : list of signal handlers registered to the thread
     int signals[128] : store whether signal is recieved
     
 
@@ -114,10 +116,13 @@ access to reading and writing with files.
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
 
-    when open files, files are be assigned to new file descriptors.
-    open function skims file descriptors and give unassigned file desciptor.
-    If an opened file already has file descriptor, close an existing one.
+    When opening files, files are assigned to new file descriptors.
+    open() function skims file descriptors and allocate an unassigned file
+    desciptor to the newly opened file.
+    If an opened file already has file descriptor, the function closes the
+    existing one.
     A single thread owns its unique file descriptors.
+
 
 ---- ALGORITHMS ----
 
@@ -144,16 +149,29 @@ After writing, function returns the actual number written.
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
+Since page entries are allocated to a process in page units regardless
+of the memory it uses, both the full page system call and 2 byte system
+call will be allocated an entire page. Therefore, the greatest and least
+possible numbers of page table inspections will also be the same for
+both cases.
+    greatest: == number of total page table entries (every page is allocated)
+    least: 1 (find unallocated page at first hit)
+
+The use of TLB can reduce the number of inspections, but the rate of
+improvement will be greater for the full page case because a larger
+chunk of memory possesses more spatial locality.
 
 
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
 
-It calls process_wait.
-process_wait waits the thread which has given tid.
-The caller blocks until the child process exits by calling sema down.
-Once child process exits, deallocate the descriptor of child process
-and return the exit status of child process.
+The wait system call passes pid to process_wait().
+process_wait() searches for a child thread of the current process that
+matches the given tid, and then blocks the caller (parent thread)
+until the child process exits by calling sema_down().
+Once child process exits, process_wait() deallocates the descriptor of
+child process and returns the exit status of exited child.
+
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -169,6 +187,14 @@ and return the exit status of child process.
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
+We added the exit_status value to the thread structure, and set its
+initial value to -2. An exit_status value of -2 is impossible in a
+normally exited process, which indicates any thread with exit_status
+-2 (at the time of main thread exit) is an abnormally aborted process.
+This value triggers immediate exit(-1), which leaves the memory still being
+occupied. However, the exit_flag variable of the child informs the parent
+about unfreed resources. process_execute() of the parent thread detects
+this flag and collects this garbage memory by calling process_wait().
 
 
 ---- SYNCHRONIZATION ----
@@ -178,11 +204,13 @@ and return the exit status of child process.
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
 
-we use load_sema.
-In process_execute, we call sema_down to wait until child process success
-to load the new excutable.
-In child process, if load successed, call sema_up.
-Thus parent process know whether or not successed.
+We used the structure load_sema.
+process_execute() calls sema_down() to wait until child process successfully
+loads the new excutable.
+The child process calls sema_up() when load() is complete, regardless of
+success. The parent process is informed about completion, and whether the
+child's load() succeeded or failed is passed by exit() and exit_flag.
+
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
@@ -191,7 +219,20 @@ Thus parent process know whether or not successed.
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
-process_wait calls sema_down for semaphore of child to wait until the child process exit.
+P must not exit until C exits, and the resources occupied by C are
+completely freed. To ensure this, we used two semaphore structures;
+one to ensure the order of exit, and another to ensure the order of
+resource freeing.
+    - P calls wait(C) before C exits: sema_down(wait_sema) in wait(C)
+    waits for C to increment the semaphore when C exits.
+    - P calls wait(C) after C exits: sema_down(delete_sema) in
+    process_exit() ensures that C does not die completely before P
+    fetches necessary values from the child.
+    - P terminates without waiting before/after C exits: these cases
+    do not happen normally, unless C exits due to an exception
+    (e.g., page fault)
+    - Special cases: In such cases, P makes sure that remaining memory
+    is collected by checking several variables held by C.
 
 
 ---- RATIONALE ----
@@ -199,20 +240,27 @@ process_wait calls sema_down for semaphore of child to wait until the child proc
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
-We use the method to verify the validity of a user-provied pointer, then dereference it.
-It is more simple and intuituve than modifying page_fault function.
+We chose to verify the validity of a user-provied pointer, and then
+exit if the pointer is invalid.
+It is more simple and intuitive than modifying page_fault function.
 And we don't need to declare new function.
+
 
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
-We use array, thus we can directly access to file with file descriptor.
-But we should keep certain amount of memory space even if it is not used.
+We used an array of pointers to file objects.
+This enabled us to directly access the files with file descriptor.
+Although it takes less space than storing file objects directly, the array
+still takes up some memory even when no file is allocated.
+
 
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
 
-It is possible to easily distinguish multiple threads executed within one process.
+We used the default identity mapping, as direct casting is convenient when
+calling various functions.
+
 
                SURVEY QUESTIONS
                ================

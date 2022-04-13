@@ -99,7 +99,6 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 
     int exit_status;
-    int load_status;
     int exit_flag;
 
     struct thread *parent;
