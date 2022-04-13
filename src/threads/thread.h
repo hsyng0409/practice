@@ -100,10 +100,12 @@ struct thread
 
     int exit_status;
     int load_status;
+    struct thread *parent;
     struct list children;
     struct list_elem child_elem;
     struct semaphore wait_sema;         /* For process_wait */
     struct semaphore delete_sema;
+    struct semaphore load_sema;
 
     struct list handlers;
     int signals[128];

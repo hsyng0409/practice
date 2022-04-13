@@ -14,6 +14,12 @@
 static void syscall_handler (struct intr_frame *);
 
 struct lock file_lock;
+struct file 
+  {
+    struct inode *inode;        /* File's inode. */
+    off_t pos;                  /* Current position. */
+    bool deny_write;            /* Has file_deny_write() been called? */
+  };
 
 void
 syscall_init (void) 
@@ -171,15 +177,12 @@ int wait(pid_t pid){
 
 bool create(const char *file, unsigned initial_size){
   valid_address(file);
-  lock_acquire(&file_lock);
   bool success = false;
 
   if(strlen(file) == 0 || strlen(file) >= 14) {
-    lock_release(&file_lock);
     return success;
   }
   success = filesys_create(file,initial_size);
-  lock_release(&file_lock);
   return success;
 }
 
@@ -228,24 +231,24 @@ int filesize(int fd){
 int read(int fd, void *buffer, unsigned size) {
   if(fd < 0 || fd == 1 || fd >= 128) exit(-1);
   valid_address(buffer);
+  lock_acquire(&file_lock);
 
   int i;
   if(fd == 0) {
-    input_getc();
-    for (i=0; i<size; i++) {
-      if(((char *) buffer)[i] == '\0') {
-        //return i;
+    for (i = 0; i < size; i++) {
+      if(((char *)buffer)[i] == '\0') {
         break;
       }
     }
+  }else {
+    struct file *f = thread_current()->fd[fd];
+    if(f == NULL) {
+      lock_release(&file_lock);
+      exit(-1);
+    }
+    i = file_read(f, buffer, size);
   }
-  else{
-    struct file *f = thread_current() -> fd[fd];
-    lock_acquire(&file_lock);
-    i = file_read(f,buffer,size);
-    lock_release(&file_lock);
-    //return i;
-  }
+  lock_release(&file_lock);
   return i;
 }
 
@@ -253,13 +256,25 @@ int write(int fd, const void *buffer, unsigned size) {
   if(fd < 0 || fd == 0 || fd >= 128) exit(-1);
   valid_address(buffer);
 
+  lock_acquire(&file_lock);
+
   if(fd == 1) {
     putbuf(buffer, size);
+    lock_release(&file_lock);
     return size;
   }
   else{
     struct file *f = thread_current() -> fd[fd];
-    return file_write(f, buffer, size);
+    if(f == NULL) {
+      lock_release(&file_lock);
+      exit(-1);
+    }
+    if(f->deny_write) {
+      file_deny_write(f);
+    }
+    int ret = file_write(f, buffer, size);
+    lock_release(&file_lock);
+    return ret;
   }
   //return -1;
 }

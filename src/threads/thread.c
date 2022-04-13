@@ -481,6 +481,8 @@ init_thread (struct thread *t, const char *name, int priority)
 #ifdef USERPROG
   sema_init(&t->wait_sema, 0);
   sema_init(&t->delete_sema, 0);
+  sema_init(&t->load_sema, 0);
+  t->parent = running_thread();
   list_init(&t->children);
   list_push_back(&running_thread()->children, &t->child_elem);
   t->tid = &running_thread()->tid;

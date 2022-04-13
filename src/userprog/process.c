@@ -51,8 +51,16 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (program_name, PRI_DEFAULT, start_process, fn_copy);
+  sema_down(&thread_current()->load_sema);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+  
+  // struct list_elem *e;
+  // struct thread *t;
+  // for(e = list_begin(&thread_current()->children); e != list_end(&thread_current()->children); e = list_next(e)) {
+  //   t = list_entry(e, struct thread, child_elem);
+  //   if(t->exit_status = -1) return process_wait(tid);
+  // }
   return tid;
 }
 
@@ -126,14 +134,14 @@ start_process (void *file_name_)
   success = load (parse[0], &if_.eip, &if_.esp);
   if(success){
     argument_stack(count, parse, &if_.esp);
-    // hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
-    
+    // hex_dump(if_.esp, if_.esp, PHYS_BASE-if_.esp, true); 
   }
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
+  sema_up(&thread_current()->parent->load_sema);
   if (!success) 
-    thread_exit();
+    exit(-1);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
