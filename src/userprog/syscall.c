@@ -278,7 +278,7 @@ void close(int fd){
 
 void sigaction(int signum, void *handler){
   struct thread *t = thread_current();
-  struct handler_reg *h;
+  struct handler_reg *h = malloc(sizeof *h);
   h -> signum = signum;
   h -> sighandler = handler;
   list_push_back(&t->handlers, &h->handler_elem);
