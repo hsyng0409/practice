@@ -104,7 +104,9 @@ struct thread
     struct list_elem child_elem;
     struct semaphore wait_sema;         /* For process_wait */
     struct semaphore delete_sema;
+
     struct list handlers;
+    int signals[128];
 
     struct file *fd[128];
 #endif

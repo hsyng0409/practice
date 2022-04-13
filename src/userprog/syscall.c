@@ -136,9 +136,20 @@ void halt(void){
 }
 
 void exit(int status){
-  thread_current()->exit_status = status;
+  struct thread *t = thread_current();
+  for(int i=0; i<128; i++) {
+    if(t->signals[i] == 1){
+      struct list_elem *e;
+      for(e = list_begin(&t->handlers); e != list_end(&t->handlers); e = list_next(e)){
+        struct handler_reg *r = list_entry(e, struct handler_reg, handler_elem);
+        if(r->signum == i) printf("Signum: %d, Action: 0x%x\n", i, r->sighandler);
+      }
+    }
+  }
+
+  t->exit_status = status;
   for(int i=3; i<128; i++) {
-    if(thread_current()->fd[i] != NULL){
+    if(t->fd[i] != NULL){
       close(i);
     }
   }
@@ -278,7 +289,7 @@ void close(int fd){
 
 void sigaction(int signum, void *handler){
   struct thread *t = thread_current();
-  struct handler_reg *h = malloc(sizeof *h);
+  struct handler_reg *h = malloc(sizeof (struct handler_reg));
   h -> signum = signum;
   h -> sighandler = handler;
   list_push_back(&t->handlers, &h->handler_elem);
@@ -294,13 +305,7 @@ void sendsig(pid_t pid, int signum){
     child = list_entry(e, struct thread, child_elem);
 
     if(child->tid == pid) {
-      struct handler_reg *reg;
-      for(r = list_begin(&child->handlers); r != list_end(&child->handlers); r=list_next(r)){
-        reg = list_entry(r, struct handler_reg, handler_elem);
-        if(signum == reg->signum) {
-          printf("Signum: %d, Action: %x", reg->signum, &reg->sighandler);
-        }
-      }
+      child->signals[signum] = 1;
     }
   }
 }
