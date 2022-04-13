@@ -9,8 +9,7 @@
 >> Fill in the names and email addresses of your group members.
 
 Joown Han <cony717@kaist.ac.kr>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Seoyoung Hwang <hsyng@kaist.ac.kr>
 
 ---- PRELIMINARIES ----
 
@@ -20,6 +19,8 @@ FirstName LastName <email@domain.example>
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
+
+    None.
 
                ARGUMENT PASSING
                ================
@@ -91,14 +92,50 @@ access to reading and writing with files.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+-- added to struct thread (thread.h) --
+    int exit_status : exit status of the thread
+    int load_status : 
+    int exit_flag : detect threads that are not correctly exited
+    struct thread *parent : parent process
+    struct list children : child process list
+    struct list_elem child_elem : child process list element
+    struct semaphore wait_sema : for process_wait 
+    struct semaphore delete_sema : 
+    struct semaphore load_sema : wait for the successful load
+
+    struct list handlers : reg sighandler action
+    int signals[128] : store whether signal is recieved
+    
+
+    struct file *fd[128] : file descriptors
+
+
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
+
+    when open files, files are be assigned to new file descriptors.
+    open function skims file descriptors and give unassigned file desciptor.
+    If an opened file already has file descriptor, close an existing one.
+    A single thread owns its unique file descriptors.
 
 ---- ALGORITHMS ----
 
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
+
+read system call recieves file descriptor, buffer, and size from user.
+After check aderresses are valid, it reads data.
+If fd is 0 function reads data from stdin and store to the buffer.
+otherwise, if fd is valid, it reads from file whose fd is given value.
+For safety, read function use file_lock.
+After reading, function returns the number of bytes actually read.
+write system call recieves file descriptor, buffer, and size from user.
+After check aderresses are valid, it writes data.
+If fd is 1 function writes buffer data to stdout.
+otherwise, if fd is valid and file doesn't deny writing, it writes to file whose fd is given value.
+After writing, function returns the actual number written.
+
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -107,8 +144,16 @@ access to reading and writing with files.
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
+
+
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
+
+It calls process_wait.
+process_wait waits the thread which has given tid.
+The caller blocks until the child process exits by calling sema down.
+Once child process exits, deallocate the descriptor of child process
+and return the exit status of child process.
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -124,12 +169,20 @@ access to reading and writing with files.
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
+
+
 ---- SYNCHRONIZATION ----
 
 >> B7: The "exec" system call returns -1 if loading the new executable
 >> fails, so it cannot return before the new executable has completed
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
+
+we use load_sema.
+In process_execute, we call sema_down to wait until child process success
+to load the new excutable.
+In child process, if load successed, call sema_up.
+Thus parent process know whether or not successed.
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
@@ -138,16 +191,28 @@ access to reading and writing with files.
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
+process_wait calls sema_down for semaphore of child to wait until the child process exit.
+
+
 ---- RATIONALE ----
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
+We use the method to verify the validity of a user-provied pointer, then dereference it.
+It is more simple and intuituve than modifying page_fault function.
+And we don't need to declare new function.
+
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
+We use array, thus we can directly access to file with file descriptor.
+But we should keep certain amount of memory space even if it is not used.
+
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+
+It is possible to easily distinguish multiple threads executed within one process.
 
                SURVEY QUESTIONS
                ================
