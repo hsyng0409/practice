@@ -482,11 +482,13 @@ init_thread (struct thread *t, const char *name, int priority)
   sema_init(&t->wait_sema, 0);
   sema_init(&t->delete_sema, 0);
   sema_init(&t->load_sema, 0);
+
   t->parent = running_thread();
   list_init(&t->children);
   list_push_back(&running_thread()->children, &t->child_elem);
-  t->tid = &running_thread()->tid;
-  t->exit_status = -1;
+
+  t->exit_status = -2;
+  t->exit_flag = 0;
   list_init(&t->handlers);
 
   for(int i=0; i<128; i++){

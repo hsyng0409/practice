@@ -55,12 +55,12 @@ process_execute (const char *file_name)
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   
-  // struct list_elem *e;
-  // struct thread *t;
-  // for(e = list_begin(&thread_current()->children); e != list_end(&thread_current()->children); e = list_next(e)) {
-  //   t = list_entry(e, struct thread, child_elem);
-  //   if(t->exit_status = -1) return process_wait(tid);
-  // }
+  struct list_elem *e;
+  struct thread *t;
+  for(e = list_begin(&thread_current()->children); e != list_end(&thread_current()->children); e = list_next(e)) {
+    t = list_entry(e, struct thread, child_elem);
+    if(t->exit_flag == 1) return process_wait(tid);
+  }
   return tid;
 }
 
@@ -140,8 +140,10 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   palloc_free_page (file_name);
   sema_up(&thread_current()->parent->load_sema);
-  if (!success) 
+  if (!success) {
+    thread_current()->exit_flag = 1;
     exit(-1);
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -193,6 +195,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  if(cur->exit_status == -2) {
+    exit(-1);
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

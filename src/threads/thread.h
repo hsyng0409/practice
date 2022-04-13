@@ -100,6 +100,8 @@ struct thread
 
     int exit_status;
     int load_status;
+    int exit_flag;
+
     struct thread *parent;
     struct list children;
     struct list_elem child_elem;
