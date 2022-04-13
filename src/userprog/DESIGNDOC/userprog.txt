@@ -30,19 +30,57 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+None.
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+start_process() first uses strtok_r() to parse the command line, and
+stores the parsed strings in an array. It then calls the static function
+argument_stack(), which takes argc, argv, and the address of esp as input.
+Since the argument is stored in a stack, the elements of argv[] has
+to be stacked in reverse order. In order to do this, we used reverse
+indexing (using argc) to stack the elements from left to right.
+We avoided stack page overflow by limiting the length of addr[], the
+array that stores the start addresses of argv.
+
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
+strtok() is a wrapper function that calls strtok_r() in its implementation.
+In other words, strtok() and strtok_r() does the same thing, but strtok()
+defines the save pointer (**save_ptr) as a static variable when called.
+Since static variables are stored in the data segment instead of the local
+stack area, these variables are prone to access from other threads in the
+middle of execution. Thus, in multi-process operating systems like Pintos,
+it would be safer to use atomic operations like strtok_r().
+
+
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
+
+Compared with the shell, the kernel is a relatively low-level process.
+This difference gives the Unix approach the following advantages:
+
+(1) Safer from memory corruption
+The kernel is the layer of the hardware that performs memory management.
+Performing argument parsing in the kernel memory area can potentially
+result in memory corruption, which is often fatal to the entire system.
+The Unix approach is safer because it modifies data in the user memory.
+
+(2) Easier for the user to access
+Because the kernel has direct access to the hardware, it is difficult
+for the user to understand what is happening in an intuitive manner.
+The shell, more verbose and accessible, can help the user have easier
+access to reading and writing with files.
+
 
                  SYSTEM CALLS
                  ============
