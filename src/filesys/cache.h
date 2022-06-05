@@ -17,7 +17,7 @@ struct buffer_head {
 void cache_init(void);
 
 void cache_read (block_sector_t sector_idx, void *buffer, off_t bytes_read, int chunk_size, int sector_ofs);
-void cache_write (block_sector_t sector_idx, void *buffer, off_t bytes_write, int chunk_size, int sector_ofs);
+void cache_write (block_sector_t sector_idx, void *buffer, off_t bytes_written, int chunk_size, int sector_ofs);
 
 void cache_terminate (void);
 

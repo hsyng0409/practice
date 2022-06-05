@@ -6,7 +6,6 @@
 #include "threads/malloc.h"
 #include "devices/block.h"
 #include "filesys.h"
-#include "cache.h"
 
 static struct lock cache_lock;
 static struct list buffer_head_table;
@@ -42,11 +41,11 @@ void cache_read (block_sector_t sector_idx, void *buffer, off_t bytes_read,
     }
 
     b->access = true;
-    memcpy(buffer, b->data, BLOCK_SECTOR_SIZE);
+    memcpy(buffer + bytes_read, b->data, BLOCK_SECTOR_SIZE);
     lock_release(&cache_lock);
 }
 
-void cache_write (block_sector_t sector_idx, void *buffer, off_t bytes_write,
+void cache_write (block_sector_t sector_idx, void *buffer, off_t bytes_written,
                  int chunk_size, int sector_ofs) {
     lock_acquire(&cache_lock);
 
@@ -62,7 +61,7 @@ void cache_write (block_sector_t sector_idx, void *buffer, off_t bytes_write,
 
     b->access = true;
     b->dirty = true;
-    memcpy(b->data, buffer, BLOCK_SECTOR_SIZE);
+    memcpy(b->data, buffer + bytes_written, BLOCK_SECTOR_SIZE);
     lock_release(&cache_lock);
 }
 
@@ -80,9 +79,10 @@ void cache_terminate (void) {
 struct buffer_head *cache_select_victim (void) {
     ASSERT(lock_held_by_current_thread(&cache_lock));
     struct list_elem *e = list_begin(&buffer_head_table);
+    struct buffer_head *b;
 
     while(true) {
-        struct buffer_head *b = list_entry(e, struct buffer_head, bhead_elem);
+        b = list_entry(e, struct buffer_head, bhead_elem);
 
         if (!b->in_use) return b;
 
@@ -92,6 +92,9 @@ struct buffer_head *cache_select_victim (void) {
         if(e == list_end(&buffer_head_table)) e = list_begin(&buffer_head_table);
         else e = list_next(e);
     }
+
+    if(b->dirty) cache_flush_entry(b);
+    return b;
 }
 
 struct buffer_head *cache_lookup (block_sector_t sector) {
