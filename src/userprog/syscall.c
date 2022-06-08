@@ -392,7 +392,7 @@ bool mkdir(const char *dir)
   const char *dir_name;
   path = dir_parse(dir,&dir_name);
 
-  if (dir_name == NULL) return success;
+  if (dir_name == NULL || *dir_name == '\0') return success;
 
   struct inode *inode;
   block_sector_t inode_sector = 0;
