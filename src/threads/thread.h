@@ -113,6 +113,8 @@ struct thread
 
     struct file *fd[128];
 #endif
+   
+    struct dir *curdir;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir 
@@ -201,6 +202,10 @@ dir_remove (struct dir *dir, const char *name)
   if (inode == NULL)
     goto done;
 
+  bool is_dir = inode_isdir(inode);
+  if (is_dir && !dir_empty(inode))
+    goto done; 
+
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
@@ -233,4 +238,69 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
         } 
     }
   return false;
+}
+
+bool
+dir_empty (struct dir *dir)
+{
+  struct dir_entry e;
+  off_t ofs;
+  int success = 0;
+
+  ASSERT (dir != NULL);
+
+  for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+       ofs += sizeof e) 
+    if (e.in_use)
+      success ++;
+
+  return success == 0;
+}
+
+struct dir *dir_parse (const char *name, char **save_name)
+{
+  int count = 0;
+  char *parse[128];
+  char *token, *save_ptr;
+
+  struct dir *path;
+  struct inode *inode;
+  int idx = 0;
+
+  ASSERT (name != NULL);
+  ASSERT (save_name != NULL);
+
+  //const char *prefix;
+  //strlcpy(prefix,name,1);
+  //if(strncmp(name,"/",1) == 0) path = dir_open_root();
+  //if (strcmp(prefix,"/")==0) path = dir_open_root();
+  //prefix = strstr(name,"/");
+  //if (prefix == name) path = dir_open_root();
+  
+  //else path = thread_current()->curdir;
+
+  for (token = strtok_r(name, "/", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+    parse[count] = token;
+    count++;
+  }
+
+  if(count < 1) return dir_open_root();
+  *save_name = parse[count-1];
+  
+
+  if(parse[0] != "." && parse[0] != ".."){
+    path = dir_open_root();
+  }
+  else path = thread_current()->curdir;
+
+  if (count < 2) return path;
+
+  for (idx = 0;idx < count-1; idx++){
+    if(!dir_lookup(path,parse[idx],&inode)) return NULL;
+    dir_close(path);  
+    path = dir_open(inode);
+    if (path == NULL) return NULL;
+  }
+
+  return path;
 }

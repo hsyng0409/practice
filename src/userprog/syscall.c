@@ -9,6 +9,8 @@
 #include "devices/shutdown.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
+#include "filesys/inode.h"
 #include "userprog/process.h"
 
 static void syscall_handler (struct intr_frame *);
@@ -133,6 +135,32 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_YIELD:
       sched_yield();
+      break;
+
+    case SYS_CHDIR:
+      valid_address(f->esp + 4);
+      f->eax = chdir((char *)*(uint32_t *)(f->esp + 4));
+      break;
+
+    case SYS_MKDIR:
+      valid_address(f->esp + 4);
+      f->eax = mkdir((char *)*(uint32_t *)(f->esp + 4));
+      break;
+
+    case SYS_READDIR:
+      valid_address(f->esp + 4);
+      valid_address(f->esp + 8);
+      f->eax = readdir((int)*(uint32_t *)(f->esp + 4), (char *)*(uint32_t *)(f->esp + 8));
+      break;
+
+    case SYS_ISDIR:
+      valid_address(f->esp + 4);
+      f->eax = isdir((int)*(uint32_t *)(f->esp + 4));
+      break;
+
+    case SYS_INUMBER:
+      valid_address(f->esp + 4);
+      f->eax = inumber((int)*(uint32_t *)(f->esp + 4));
       break;
   }
 }
@@ -327,4 +355,85 @@ void sendsig(pid_t pid, int signum){
 
 void sched_yield(void){
   thread_yield();
+}
+
+bool chdir(const char *dir)
+{
+  bool success = false;
+  struct thread *t = thread_current();
+  struct dir *cur = t->curdir;
+
+  if (dir == NULL) return success;
+
+  struct dir *path;
+  const char *dir_name;
+  struct inode *inode;
+  path = dir_parse(dir,&dir_name);
+
+  if (dir_lookup(path,dir_name,&inode))
+  {
+    dir_close(path);
+    t -> curdir = dir_open(inode);
+    success = true;
+    }
+
+  return success;
+}
+
+bool mkdir(const char *dir)
+{
+  bool success = false;
+  struct thread *t = thread_current();
+  struct dir *cur = t->curdir;
+
+  ASSERT (dir != NULL);
+
+  struct dir *path;
+  const char *dir_name;
+  path = dir_parse(dir,&dir_name);
+
+  if (dir_name == NULL) return success;
+
+  struct inode *inode;
+  block_sector_t inode_sector = 0;
+  success = success && free_map_allocate (1, &inode_sector) ;
+  if (!dir_lookup(path,dir_name,&inode)){
+    if(dir_create(inode_sector,64)){
+      inode = inode_open(inode_sector);
+      inode_setdir(inode,1);
+      struct dir *ndir = dir_open(inode);
+      
+      dir_add(ndir,".",inode); //current dir
+      dir_add(ndir,"..",dir_get_inode(path)); //parent dir
+
+      dir_close(ndir);
+    }
+    dir_add (path, dir_name, inode_sector);
+    success = true;
+  }
+
+  dir_close(path);
+  return success;
+}
+
+bool readdir(int fd, char *name)
+{
+  struct file *f = thread_current() -> fd[fd];
+  struct dir *dir = dir_open(f->inode);
+  bool success = false;
+  success = dir_readdir(dir,name);
+  dir_close(dir);
+  return success;
+}
+
+bool isdir(int fd)
+{
+  struct file *f = thread_current() -> fd[fd];
+  return inode_isdir(f->inode);
+}
+
+int inumber(int fd)
+{
+  struct file *f = thread_current() -> fd[fd];
+  return inode_get_inumber(f->inode);
 }

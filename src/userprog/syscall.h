@@ -31,5 +31,11 @@ void sigaction(int signum, void *handler);
 void sendsig(pid_t pid, int signum);
 void sched_yield(void);
 
+bool chdir(const char *);
+bool mkdir(const char *);
+bool readdir(int fd, char *name);
+bool isdir(int fd);
+int inumber(int fd);
+
 
 #endif /* userprog/syscall.h */
